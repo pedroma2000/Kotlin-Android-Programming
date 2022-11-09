@@ -6,6 +6,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -24,6 +27,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import kotlinx.coroutines.launch
 import pt.ipp.estg.quizapp.models.Question
 
 @Composable
@@ -43,11 +47,7 @@ fun MyAppNavHost(
         }
         composable("mainScreen") {
             MainScreen(
-                questions = questionsList,
-                onNavigateToQuestionScreen = {
-                    navController.navigate("questionScreen/$it")
-                },
-                refreshScreen = { navController.navigate("mainScreen") }
+                questions = questionsList
             )
         }
     }
@@ -63,6 +63,9 @@ fun Preview() {
  */
 @Composable
 fun SplashScreen(onNavigateToMainScreen: ()->Unit) {
+
+    val context = LocalContext.current
+
     Column(
         modifier = Modifier.fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally
@@ -81,6 +84,7 @@ fun SplashScreen(onNavigateToMainScreen: ()->Unit) {
         )
         Button(
             modifier = Modifier.padding(top = 200.dp),
+            colors = ButtonDefaults.buttonColors( backgroundColor = Color.Blue, contentColor = Color.White),
             onClick = onNavigateToMainScreen
         ) {
             Text(
@@ -95,105 +99,89 @@ fun SplashScreen(onNavigateToMainScreen: ()->Unit) {
  * Main Screen Component
  */
 @Composable
-fun MainScreen(questions: List<Question>, onNavigateToQuestionScreen: (questionIndex:String)->Unit, refreshScreen : ()->Unit) {
-
-    val navController = rememberNavController()
+fun MainScreen(questions: List<Question>) {
+    var reload by remember { mutableStateOf(false) }
+    var questionIndex by remember { mutableStateOf("0") }
     val scaffoldState = rememberScaffoldState(rememberDrawerState(initialValue = DrawerValue.Closed))
+    val scope = rememberCoroutineScope()
+
+    val handleReload = {
+        reload = !reload
+    }
 
     Scaffold(
         scaffoldState = scaffoldState,
         topBar = {
-                 Row() {
-                     
-                 }
-        },
+            TopAppBar(
+                title = {
+                    Text("QUIZapp!", color = Color.White)
+                },
+                navigationIcon = {
+                    IconButton(onClick = { scope.launch {
+                        if(scaffoldState.drawerState.isClosed)
+                            scaffoldState.drawerState.open()
+                        else
+                            scaffoldState.drawerState.close()
+                    } }) {
+                        Icon( Icons.Filled.Menu, "backIcon", tint = Color.White )
+                    }
+                },
+                backgroundColor = Color.Blue)
+                 },
         drawerContent = {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .fillMaxHeight(0.8f),
+                    .fillMaxHeight(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                var i = 0
                 questions.forEachIndexed { index, question ->
                     var questionRowModifier = Modifier
                         .fillMaxWidth()
-                        .padding(bottom = 20.dp)
+                        .padding(bottom = 5.dp)
                         .height(50.dp)
-                        .background(Color.LightGray, shape = RoundedCornerShape(8.dp))
+                        .background(Color.LightGray)
                         .clickable {
-                            if (question.isAnswered == "0") {
-                                onNavigateToQuestionScreen(index.toString())
-                            }
+                            questionIndex = index.toString()
+                            scope.launch { scaffoldState.drawerState.close() }
                         }
                     Question(question, questionRowModifier)
+                }
+                Button(
+                    modifier = Modifier.align(Alignment.CenterHorizontally),
+                    onClick = {
+                        questions.forEach { question ->
+                            question.isAnswered = "0"
+                        }
+                        handleReload()
+                    }
+                ) {
+                    Text(
+                        text = "RECOMEÇAR DESAFIO",
+                        fontSize = 16.sp
+                    )
                 }
             }
         },
         content = {
-            NavHost(
-                navController = navController,
-                startDestination = "questionScreen/1"
-            ) {
-                composable("questionScreen/{questionId}", listOf(navArgument("questionId") { type = NavType.StringType })
-                ) {
-                        navBackStackEntry ->
-                    QuestionScreen(
-                        questions = questions,
-                        questionIndex = navBackStackEntry.arguments?.getString("questionId").toString(),
-                        onNavigateToMainScreen = { navController.navigate("mainScreen") },
-                        onAnswer = {
-                            questions.get(Integer.parseInt(navBackStackEntry.arguments?.getString("questionId").toString())).isAnswered = it
-                        }
-                    )
-                }
-            }
-        }
-    )
-    /*
-    Column(
-        modifier = Modifier.fillMaxSize(1f),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.SpaceBetween
-    ) {
-        Text(
-            modifier = Modifier
-                .fillMaxWidth()
-                .fillMaxHeight(0.1f)
-                .padding(bottom = 10.dp, top = 10.dp),
-            text = "Selecione uma pergunta",
-            fontSize = 22.sp,
-            fontWeight = FontWeight.W700,
-            fontFamily = FontFamily.Monospace,
-            textAlign = TextAlign.Center
-        )
+            if(questions.get(Integer.parseInt(questionIndex)).isAnswered != "0") {
+                AnsweredQuestionScreen(questions = questions, questionIndex = questionIndex)
+            } else {
+                QuestionScreen(
+                    questions = questions,
+                    questionIndex = questionIndex,
+                    onAnswer = {
+                        questions.get(Integer.parseInt(questionIndex)).isAnswered = it
 
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .fillMaxHeight(0.5f),
-        ) {
-            Button(
-                modifier = Modifier.align(Alignment.Center),
-                onClick = {
-                    questions.forEach { question ->
-                        question.isAnswered = "0"
                     }
-                    refreshScreen()
-                }
-            ) {
-                Text(
-                    text = "RECOMEÇAR DESAFIO",
-                    fontSize = 16.sp
                 )
             }
         }
-    }*/
+    )
 }
 
 @Composable
 fun Question(question: Question, questionRowModifier:Modifier) {
-    val context = LocalContext.current
     Row(
         modifier = questionRowModifier,
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -201,7 +189,7 @@ fun Question(question: Question, questionRowModifier:Modifier) {
     ) {
         Text(
             modifier = Modifier
-                .fillMaxWidth(0.4f)
+                .fillMaxWidth(0.5f)
                 .padding(start = 20.dp),
             text = question.question,
             fontSize = 20.sp,
@@ -210,8 +198,8 @@ fun Question(question: Question, questionRowModifier:Modifier) {
 
         Text(
             modifier = Modifier
-                .fillMaxWidth(0.6f)
-                .padding(end = 20.dp),
+                .fillMaxWidth(0.5f)
+                .padding(end = 50.dp),
             text = if (question.isAnswered == "1") "✔ Correto" else if (question.isAnswered == "-1") "❌ Errado" else "",
             color = if (question.isAnswered == "1") Color.Green else Color.Red,
             fontSize = 20.sp
@@ -223,7 +211,7 @@ fun Question(question: Question, questionRowModifier:Modifier) {
  * QuestionScreen Component
  */
 @Composable
-fun QuestionScreen(questions: List<Question>, questionIndex: String, onNavigateToMainScreen: ()->Unit, onAnswer: (String)->Unit) {
+fun QuestionScreen(questions: List<Question>, questionIndex: String, onAnswer: (String)->Unit) {
     val question = questions.get(Integer.parseInt(questionIndex))
     var input by remember { mutableStateOf(TextFieldValue(""))}
     var answer = "-1"
@@ -267,7 +255,6 @@ fun QuestionScreen(questions: List<Question>, questionIndex: String, onNavigateT
 
                 if(answer != "0") {
                     onAnswer(answer)
-                    onNavigateToMainScreen()
                 }
             },
             colors = ButtonDefaults.buttonColors( backgroundColor = Color.Blue, contentColor = Color.White)
@@ -278,5 +265,34 @@ fun QuestionScreen(questions: List<Question>, questionIndex: String, onNavigateT
                 fontSize = 16.sp
             )
         }
+    }
+}
+
+/**
+ * QuestionScreen Component
+ */
+@Composable
+fun AnsweredQuestionScreen(questions: List<Question>, questionIndex: String) {
+    val question = questions.get(Integer.parseInt(questionIndex))
+
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            modifier = Modifier.padding(top = 100.dp, bottom = 100.dp),
+            text = question.question,
+            fontSize = 50.sp,
+            fontFamily = FontFamily.Monospace,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            text = if (question.isAnswered == "1") "${question.answer}\nResposta Correta!"
+            else "Resposta Errada!\nA resposta correta era ${question.answer}",
+            modifier = Modifier
+                .width(150.dp)
+                .height(50.dp),
+            color = if(question.isAnswered == "1") Color.Green else Color.Red
+        )
     }
 }
