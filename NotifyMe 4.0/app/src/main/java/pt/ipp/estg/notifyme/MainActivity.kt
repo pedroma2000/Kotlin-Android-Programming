@@ -1,9 +1,11 @@
 package pt.ipp.estg.notifyme
 
-import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.BitmapFactory
 import android.os.Build
 import android.os.Bundle
@@ -17,6 +19,7 @@ import androidx.compose.material.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -25,6 +28,9 @@ import pt.ipp.estg.notifyme.ui.theme.NotifyMeTheme
 val CHANNEL_ID = "1"
 
 class MainActivity : ComponentActivity() {
+
+    val receiver = NotificationBroadcastReceive()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
@@ -35,11 +41,24 @@ class MainActivity : ComponentActivity() {
                     color = MaterialTheme.colors.background
                 ) {
                     MainScreen(notify = {
+                        val intent = Intent("NOTIFICATION_CANCELLED")
+
+                        receiver.action = it
+
+                        var builder = NotificationCompat.Builder(this, CHANNEL_ID)
+                            .setSmallIcon(R.drawable.ic_baseline_android_24)
+                            .setContentTitle("Foi Notificado!")
+                            .setContentText("Este é o texto da notificação")
+                            .setAutoCancel(true)
+                            .setDeleteIntent(PendingIntent.getBroadcast(this, 0,
+                                intent, PendingIntent.FLAG_CANCEL_CURRENT))
+
                         with(NotificationManagerCompat.from(this)) {
                             /**
                              * notificationId is a unique int for each notification that you must define
                              */
                             notify(1, builder.build())
+
                         }
                     },
                     cancelNotification = {
@@ -49,6 +68,7 @@ class MainActivity : ComponentActivity() {
                     },
                     updateNotification = {
                         val bitmap = BitmapFactory.decodeResource(resources, R.mipmap.ic_banner_foreground)
+                        val intent = Intent("NOTIFICATION_CANCELLED")
 
                         var updatedNotification = NotificationCompat.Builder(this, CHANNEL_ID)
                             .setSmallIcon(R.drawable.ic_baseline_android_24)
@@ -57,6 +77,8 @@ class MainActivity : ComponentActivity() {
                             .setLargeIcon(bitmap)
                             .setStyle(NotificationCompat.BigPictureStyle().bigPicture(bitmap))
                             .setAutoCancel(true)
+                            .setDeleteIntent(PendingIntent.getBroadcast(this, 0,
+                                intent, PendingIntent.FLAG_CANCEL_CURRENT))
 
                         with(NotificationManagerCompat.from(this)) {
                             notify(1, updatedNotification.build())
@@ -67,11 +89,27 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    var builder = NotificationCompat.Builder(this, CHANNEL_ID)
-        .setSmallIcon(R.drawable.ic_baseline_android_24)
-        .setContentTitle("Foi Notificado!")
-        .setContentText("Este é o texto da notificação")
-        .setAutoCancel(true)
+    override fun onResume() {
+        super.onResume()
+
+        val filter = IntentFilter()
+        filter.addAction("NOTIFICATION_CANCELLED")
+
+        /**
+         * Register the receiver that detects the dismissed notifications
+         */
+        this.registerReceiver(receiver,filter)
+
+    }
+
+    override fun onPause() {
+        super.onPause()
+
+        /**
+         * Unregister the receiver that detects the dismissed notifications
+         */
+        this.unregisterReceiver(receiver)
+    }
 
     private fun createNotificationChannel() {
         /**
@@ -97,7 +135,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun MainScreen(notify:()->Unit, cancelNotification:()->Unit, updateNotification:()->Unit) {
+fun MainScreen(notify:(()->Unit)->Unit, cancelNotification:()->Unit, updateNotification:()->Unit) {
     var isNotificationEnable by remember { mutableStateOf(false) }
 
     Box(modifier = Modifier
@@ -111,7 +149,9 @@ fun MainScreen(notify:()->Unit, cancelNotification:()->Unit, updateNotification:
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Button(onClick = {
-                notify()
+                notify {
+                    isNotificationEnable = false
+                }
                 isNotificationEnable = true
             }) {
                 Text(text = "Notify Me!")
